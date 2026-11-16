@@ -16,10 +16,9 @@ SECONDS_PER_MINUTE = 60
 MINUTES_PER_DAY = 24 * 60
 DAY_SECONDS = MINUTES_PER_DAY * SECONDS_PER_MINUTE
 DAY_START = DAY_INDEX * DAY_SECONDS
-DAY_END = DAY_START + DAY_SECONDS
 
 
-def read_day(source):
+def read_days(source, day_indices):
     with source.open(encoding="utf-8-sig", newline="") as stream:
         reader = csv.DictReader(stream)
         required = {"Timestamp", "Model", "Log Type", "Request tokens", "Response tokens"}
@@ -27,20 +26,22 @@ def read_day(source):
         if missing:
             raise ValueError(f"Missing source columns: {', '.join(sorted(missing))}")
 
-        rows = []
+        days = {day: [] for day in day_indices}
         for row in reader:
             timestamp = Decimal(row["Timestamp"])
+            day = int(timestamp // DAY_SECONDS)
             if (
-                DAY_START <= timestamp < DAY_END
+                day in days
                 and row["Model"] == "ChatGPT"
                 and row["Log Type"] == "API log"
                 and int(row["Response tokens"]) > 0
             ):
-                rows.append(row)
+                days[day].append(row)
 
-        if not rows:
-            raise ValueError(f"No matching requests for day {DAY_INDEX}")
-        return reader.fieldnames, rows
+        for day, rows in days.items():
+            if not rows:
+                raise ValueError(f"No matching requests for day {day}")
+        return reader.fieldnames, days
 
 
 def write_trace(path, fields, rows):
@@ -62,19 +63,19 @@ def token_totals(rows):
     )
 
 
-def arrival_minute(row):
-    elapsed = Decimal(row["Timestamp"]) - DAY_START
+def arrival_minute(row, day_start=DAY_START):
+    elapsed = Decimal(row["Timestamp"]) - day_start
     if not 0 <= elapsed < DAY_SECONDS:
         raise ValueError("Arrival outside the selected day")
     return int(elapsed // SECONDS_PER_MINUTE)
 
 
-def minute_totals(rows):
+def minute_totals(rows, day_start=DAY_START):
     requests = [0] * MINUTES_PER_DAY
     input_tokens = [0] * MINUTES_PER_DAY
     output_tokens = [0] * MINUTES_PER_DAY
     for row in rows:
-        minute = arrival_minute(row)
+        minute = arrival_minute(row, day_start)
         requests[minute] += 1
         input_tokens[minute] += int(row["Request tokens"])
         output_tokens[minute] += int(row["Response tokens"])
@@ -101,7 +102,8 @@ def plot_counts(path, counts, title, color, upper_limit):
     ax.set_xticks(ticks, [clock_time(minute) for minute in ticks])
     ax.set_xlim(0, MINUTES_PER_DAY)
     ax.set_ylim(0, upper_limit)
-    ax.set_yticks(range(0, upper_limit + 1, 20))
+    tick_step = 100 if upper_limit > 200 else 20
+    ax.set_yticks(range(0, upper_limit + 1, tick_step))
     ax.set_xlabel("Время суток по трассе")
     ax.set_ylabel("Запросов в минуту")
     ax.set_title(title, loc="left", fontweight="bold", pad=10)
@@ -112,27 +114,42 @@ def plot_counts(path, counts, title, color, upper_limit):
     plt.close(fig)
 
 
-def plot_token_usage(source, path, request_peak_minutes):
-    rows = read_trace(source)
+def plot_request_counts(directory, day, real_counts, uniform_counts):
+    real_peak, uniform_peak = max(real_counts), max(uniform_counts)
+    upper_limit = 20 * (max(real_peak, uniform_peak) // 20 + 1)
+    plot_counts(
+        directory / f"day{day}_real.png", real_counts,
+        "Исходные времена прихода", "#245583", upper_limit,
+    )
+    plot_counts(
+        directory / f"day{day}_uniform.png", uniform_counts,
+        "Равномерные времена прихода", "#00766c", upper_limit,
+    )
+
+
+def plot_token_usage(path, input_tokens, output_tokens, request_peak_minutes):
     fig, axes = plt.subplots(2, 1, sharex=True, figsize=(10, 5.6), layout="constrained")
     series = (
-        ("input_tokens", "Входные токены", "#245583"),
-        ("output_tokens", "Выходные токены", "#00766c"),
+        (input_tokens, "Входные токены", "#245583"),
+        (output_tokens, "Выходные токены", "#00766c"),
     )
-    for ax, (column, title, color) in zip(axes, series):
-        values = [int(row[column]) for row in rows]
-        ax.stairs(values, range(len(rows) + 1), color=color, linewidth=1, baseline=None)
+    for ax, (values, title, color) in zip(axes, series):
+        ax.stairs(values, range(len(values) + 1), color=color, linewidth=1, baseline=None)
         for minute in request_peak_minutes:
             ax.axvline(minute + 0.5, color="#687481", linestyle="--", linewidth=1, zorder=1)
 
         peak = max(values)
-        peak_minute = values.index(peak)
-        peak_label = f"{rows[peak_minute]['minute_start']} · {peak:,}".replace(",", " ")
-        ax.scatter(peak_minute + 0.5, peak, color=color, s=22, zorder=3, clip_on=False)
-        ax.annotate(
-            peak_label, (peak_minute + 0.5, peak), xytext=(-8, 4),
-            textcoords="offset points", ha="right", va="bottom", color=color,
-        )
+        peak_minutes = [minute + 0.5 for minute, value in enumerate(values) if value == peak]
+        ax.scatter(peak_minutes, [peak] * len(peak_minutes), color=color, s=22, zorder=3, clip_on=False)
+        if len(peak_minutes) == 1:
+            minute = peak_minutes[0]
+            label = f"{clock_time(int(minute))} · {peak:,}".replace(",", " ")
+            left_of_point = minute >= MINUTES_PER_DAY / 2
+            ax.annotate(
+                label, (minute, peak), xytext=(-8 if left_of_point else 8, 4),
+                textcoords="offset points", ha="right" if left_of_point else "left",
+                va="bottom", color=color,
+            )
         ax.set_ylim(0, max(1, peak * 1.18))
         ax.set_ylabel("Токенов в минуту")
         ax.set_title(title, loc="left", fontweight="bold", pad=8)
@@ -154,7 +171,8 @@ def main():
     parser.add_argument("--output-dir", type=Path, default=Path(__file__).resolve().parent)
     args = parser.parse_args()
 
-    fields, rows = read_day(args.source)
+    fields, days = read_days(args.source, [DAY_INDEX])
+    rows = days[DAY_INDEX]
     count = len(rows)
     args.output_dir.mkdir(parents=True, exist_ok=True)
     real_path = args.output_dir / "day16_real.csv"
@@ -190,18 +208,9 @@ def main():
     for row in uniform:
         uniform_counts[arrival_minute(row)] += 1
     real_peak, uniform_peak = max(real_counts), max(uniform_counts)
-    upper_limit = 20 * (max(real_peak, uniform_peak) // 20 + 1)
-    plot_counts(
-        args.output_dir / "day16_real.png", real_counts,
-        "Исходные времена прихода", "#245583", upper_limit,
-    )
-    plot_counts(
-        args.output_dir / "day16_uniform.png", uniform_counts,
-        "Равномерные времена прихода", "#00766c", upper_limit,
-    )
-
+    plot_request_counts(args.output_dir, DAY_INDEX, real_counts, uniform_counts)
     peak_minutes = [i for i, value in enumerate(real_counts) if value == real_peak]
-    plot_token_usage(minute_totals_path, args.output_dir / "day16_real_tokens.png", peak_minutes)
+    plot_token_usage(args.output_dir / "day16_real_tokens.png", input_tokens, output_tokens, peak_minutes)
     peak_times = [clock_time(minute) for minute in peak_minutes]
     print(f"Both traces: {count} requests, {totals[0]} input tokens, {totals[1]} output tokens")
     print(f"Real: mean {sum(real_counts) / MINUTES_PER_DAY:.5f}, max {real_peak} requests/min")
