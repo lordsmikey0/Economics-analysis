@@ -144,9 +144,15 @@ def main():
     parser.add_argument("mode", choices=["smoke", "full"])
     parser.add_argument("--vidur", required=True, type=Path)
     parser.add_argument("--work-dir", required=True, type=Path)
+    parser.add_argument("--config", type=Path, help="JSON overrides for stage2/config.json")
+    parser.add_argument("--smoke-replicas", type=int, choices=[1, 2], default=1)
     parser.add_argument("--jobs", type=int, choices=[1, 2, 3, 4], default=1)
     args = parser.parse_args()
     config = json.loads((STAGE2 / "config.json").read_text(encoding="utf-8"))
+    if args.config:
+        overrides = json.loads(args.config.read_text(encoding="utf-8"))
+        config["vidur_args"].update(overrides.pop("vidur_args", {}))
+        config.update(overrides)
     checkout, work = args.vidur.resolve(), args.work_dir.resolve()
     commit = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=checkout, text=True).strip()
     if commit != config["vidur_commit"]:
@@ -158,7 +164,7 @@ def main():
         minute = config["smoke"]["minute_offset"]
         sample = [row for row in traces["real"] if minute * 60 <= row[0] < (minute + 1) * 60]
         sample = sample[:config["smoke"]["requests"]]
-        result = run(config, checkout, work, "real", 1, sample, smoke=True)
+        result = run(config, checkout, work, "real", args.smoke_replicas, sample, smoke=True)
         if result["completed"] != config["smoke"]["requests"]:
             raise RuntimeError("The smoke test did not complete the expected sample")
         write_csv(work / "smoke.csv", list(result), [result.values()])

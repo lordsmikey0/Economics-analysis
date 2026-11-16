@@ -1,5 +1,7 @@
 # Этап 2. Влияние наплывов запросов на потребность в GPU
 
+[Llama 3 70B. Проверка на той же конфигурации A100](llama3-70b.md)
+
 Vidur моделирует обслуживание API-нагрузки из BurstGPT на `meta-llama/Meta-Llama-3-8B`. Использован готовый профиль вычислений и внимания для NVIDIA A100 80 ГБ из зафиксированной версии Vidur. Симулятор работал на CPU. [Версия Vidur `abae7f6`](https://github.com/microsoft/vidur/commit/abae7f63aa857300f5cdc6f5e0d27860cd24721b) · [Файлы профиля](https://github.com/microsoft/vidur/tree/abae7f63aa857300f5cdc6f5e0d27860cd24721b/data/profiling/compute/a100/meta-llama/Meta-Llama-3-8B)
 
 ## Входные данные и настройки

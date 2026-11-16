@@ -1,0 +1,5 @@
+{
+  "vidur_args": {
+    "replica_config_model_name": "meta-llama/Meta-Llama-3-70B"
+  }
+}
