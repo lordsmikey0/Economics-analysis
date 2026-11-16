@@ -1,0 +1,66 @@
+{
+  "native_parity": {
+    "requests": 96,
+    "completed": 96,
+    "within_2s": 96,
+    "ttft_p95_s": 1.124164703040151,
+    "within_2s_fraction": 1.0,
+    "passes": true,
+    "tpot_requests": 96,
+    "tpot_p50_ms": 67.89292860764009,
+    "tpot_p95_ms": 72.91739633623467
+  },
+  "lifecycle": {
+    "routes": {
+      "0": [
+        0,
+        86399.7,
+        null
+      ],
+      "1": [
+        1,
+        86399.91,
+        86394.8
+      ],
+      "2": [
+        2,
+        86399.99,
+        86394.8
+      ],
+      "3": [
+        0,
+        86399.999,
+        null
+      ]
+    },
+    "leases": [
+      {
+        "replica_id": 1,
+        "started_at": 86394.8,
+        "ready_at": 86399.8,
+        "stop_accepting_at": 86399.995,
+        "released_at": 86415.28498266201,
+        "accepted": 1,
+        "billable_seconds": 60
+      },
+      {
+        "replica_id": 2,
+        "started_at": 86394.8,
+        "ready_at": 86399.8,
+        "stop_accepting_at": 86399.995,
+        "released_at": 86414.5294022278,
+        "accepted": 1,
+        "billable_seconds": 60
+      },
+      {
+        "replica_id": 3,
+        "started_at": 86394.8,
+        "ready_at": 86399.8,
+        "stop_accepting_at": 86399.995,
+        "released_at": 86399.995,
+        "accepted": 0,
+        "billable_seconds": 60
+      }
+    ]
+  }
+}

@@ -18,7 +18,7 @@
     "usd_per_replica_hour": 10.137595781,
     "minimum_seconds_per_start": 60,
     "billing_increment_seconds_after_minimum": 1,
-    "verified_billable_replica_hours": null,
+    "measured_provider_vm_hours": null,
     "price_source": "https://cloud.google.com/products/compute/pricing/accelerator-optimized",
     "billing_source": "https://cloud.google.com/products/compute/pricing"
   }

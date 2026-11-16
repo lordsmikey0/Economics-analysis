@@ -1,0 +1,18 @@
+{
+  "cloud_replicas": 3,
+  "assumptions": {
+    "startup_seconds": 300,
+    "slow_startup_seconds": 900,
+    "ingress_seconds": 0.02,
+    "egress_seconds": 0.02
+  },
+  "oracle": {
+    "intervals": [[70500, 74700], [80400, 86400]]
+  },
+  "reactive": {
+    "poll_seconds": 1,
+    "oldest_local_queue_seconds": 1,
+    "no_arrivals_for_shutdown_seconds": 120
+  },
+  "validation": {"sample_start_seconds": 72540, "requests": 96}
+}
