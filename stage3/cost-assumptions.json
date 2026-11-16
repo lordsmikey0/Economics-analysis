@@ -1,0 +1,25 @@
+{
+  "currency": "USD",
+  "local": {
+    "additional_gpus": 6,
+    "amortization_days": 1460,
+    "scenarios": [
+      {"equipment_usd": 72000, "operating_usd_per_day": 9},
+      {"equipment_usd": 120000, "operating_usd_per_day": 18},
+      {"equipment_usd": 180000, "operating_usd_per_day": 30}
+    ]
+  },
+  "cloud_reference": {
+    "provider": "Google Cloud Compute Engine",
+    "region": "us-central1",
+    "machine_type": "a2-ultragpu-2g",
+    "provisioning_model": "on demand",
+    "checked_on": "2026-11-16",
+    "usd_per_replica_hour": 10.137595781,
+    "minimum_seconds_per_start": 60,
+    "billing_increment_seconds_after_minimum": 1,
+    "verified_billable_replica_hours": null,
+    "price_source": "https://cloud.google.com/products/compute/pricing/accelerator-optimized",
+    "billing_source": "https://cloud.google.com/products/compute/pricing"
+  }
+}

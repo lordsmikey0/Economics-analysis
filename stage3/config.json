@@ -1,0 +1,8 @@
+{
+  "day_index": 22,
+  "stream": "real",
+  "stage2_config": "../stage2/config-70b-tp2.json",
+  "stage2_results": "../stage2/results-70b-peak-days.csv",
+  "base_replicas": 1,
+  "new_replica_counts": [3, 4]
+}
