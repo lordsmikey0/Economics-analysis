@@ -1,0 +1,6 @@
+{
+  "vidur_args": {
+    "replica_config_model_name": "meta-llama/Meta-Llama-3-70B",
+    "replica_config_tensor_parallel_size": 2
+  }
+}

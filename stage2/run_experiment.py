@@ -113,7 +113,10 @@ def summarize(path, submitted, config):
 def run(config, checkout, work, stream, replicas, submitted, smoke=False):
     if not submitted:
         raise ValueError("No requests to replay")
-    name = "smoke" if smoke else f"{stream}_{replicas}gpu"
+    tp = config["vidur_args"]["replica_config_tensor_parallel_size"]
+    pp = config["vidur_args"]["replica_config_num_pipeline_stages"]
+    gpus = replicas * tp * pp
+    name = f"{'smoke' if smoke else stream}_{gpus}gpu"
     run_dir = Path(mkdtemp(prefix=f"{name}_", dir=work))
     trace = run_dir / "trace.csv"
     write_csv(trace, TRACE_COLUMNS, submitted)
@@ -134,7 +137,8 @@ def run(config, checkout, work, stream, replicas, submitted, smoke=False):
     metrics = list(run_dir.glob("*/request_metrics.csv"))
     if len(metrics) != 1:
         raise RuntimeError(f"Vidur did not export request metrics; see {log}")
-    result = dict(stream=stream, gpus=replicas, **summarize(metrics[0], submitted, config))
+    result = dict(stream=stream, gpus=gpus, replicas=replicas, tensor_parallel_size=tp,
+                  **summarize(metrics[0], submitted, config))
     print(json.dumps(result), flush=True)
     return result
 
