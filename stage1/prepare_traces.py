@@ -51,6 +51,12 @@ def write_trace(path, fields, rows):
         writer.writerows(rows)
 
 
+def uniform_rows(rows, day_start):
+    count = len(rows)
+    for i, row in enumerate(rows):
+        yield {**row, "Timestamp": f"{day_start + Decimal(i * DAY_SECONDS) / count:.9f}"}
+
+
 def read_trace(path):
     with path.open(encoding="utf-8", newline="") as stream:
         return list(csv.DictReader(stream))
@@ -181,10 +187,7 @@ def main():
     write_trace(
         uniform_path,
         fields,
-        (
-            {**row, "Timestamp": f"{DAY_START + Decimal(i * DAY_SECONDS) / count:.9f}"}
-            for i, row in enumerate(rows)
-        ),
+        uniform_rows(rows, DAY_START),
     )
 
     real, uniform = read_trace(real_path), read_trace(uniform_path)

@@ -29,11 +29,10 @@ def read_stream(path, day_start):
     return rows, arrivals
 
 
-def paired_traces(config):
+def paired_traces(config, trace_dir=STAGE2.parent / "stage1"):
     day = config["day_index"]
-    stage1 = STAGE2.parent / "stage1"
     (real, real_times), (uniform, uniform_times) = (
-        read_stream(stage1 / f"day{day}_{stream}.csv", day * 86400) for stream in STREAMS
+        read_stream(trace_dir / f"day{day}_{stream}.csv", day * 86400) for stream in STREAMS
     )
     traces = {stream: [] for stream in STREAMS}
     for left, right, real_time, uniform_time in zip(real, uniform, real_times, uniform_times, strict=True):
@@ -70,7 +69,7 @@ def percentile(values, fraction):
     return sorted(values)[math.ceil(fraction * len(values)) - 1] if values else None
 
 
-def summarize(path, submitted, config):
+def summarize(path, submitted, config, *, late_flags=None):
     with path.open(encoding="utf-8", newline="") as stream:
         rows = list(csv.DictReader(stream))
     observed = {}
@@ -98,7 +97,10 @@ def summarize(path, submitted, config):
             post_first_ms.append(1000 * (end - first) / (decode - 1))
 
     ttft = [observed.get(i, math.inf) for i in range(len(submitted))]
-    on_time = sum(value <= config["ttft_limit_seconds"] for value in ttft)
+    late = [value > config["ttft_limit_seconds"] for value in ttft]
+    if late_flags is not None:
+        late_flags.extend(late)
+    on_time = len(ttft) - sum(late)
     p95 = percentile(ttft, 0.95)
     return dict(
         requests=len(submitted), completed=completed, within_2s=on_time,
@@ -110,7 +112,7 @@ def summarize(path, submitted, config):
     )
 
 
-def run(config, checkout, work, stream, replicas, submitted, smoke=False):
+def run(config, checkout, work, stream, replicas, submitted, smoke=False, *, cache_dir=None, late_flags=None):
     if not submitted:
         raise ValueError("No requests to replay")
     tp = config["vidur_args"]["replica_config_tensor_parallel_size"]
@@ -123,7 +125,7 @@ def run(config, checkout, work, stream, replicas, submitted, smoke=False):
     options = dict(config["vidur_args"], cluster_config_num_replicas=replicas,
                    trace_request_generator_config_trace_file=trace,
                    trace_request_generator_config_max_tokens=config["context_tokens"],
-                   metrics_config_output_dir=run_dir, metrics_config_cache_dir=work / "cache")
+                   metrics_config_output_dir=run_dir, metrics_config_cache_dir=cache_dir or work / "cache")
     env = dict(os.environ, WANDB_MODE="disabled", CUDA_VISIBLE_DEVICES="", PYTHONHASHSEED=str(options["seed"]))
     # Run from the checkout so Vidur finds its unmodified profiling CSVs.
     command = [sys.executable, "-B", "-m", "vidur.main", *cli_options(options)]
@@ -138,9 +140,24 @@ def run(config, checkout, work, stream, replicas, submitted, smoke=False):
     if len(metrics) != 1:
         raise RuntimeError(f"Vidur did not export request metrics; see {log}")
     result = dict(stream=stream, gpus=gpus, replicas=replicas, tensor_parallel_size=tp,
-                  **summarize(metrics[0], submitted, config))
+                  **summarize(metrics[0], submitted, config, late_flags=late_flags))
     print(json.dumps(result), flush=True)
     return result
+
+
+def load_config(overrides_path=None):
+    config = json.loads((STAGE2 / "config.json").read_text(encoding="utf-8"))
+    if overrides_path:
+        overrides = json.loads(overrides_path.read_text(encoding="utf-8"))
+        config["vidur_args"].update(overrides.pop("vidur_args", {}))
+        config.update(overrides)
+    return config
+
+
+def check_vidur(checkout, config):
+    commit = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=checkout, text=True).strip()
+    if commit != config["vidur_commit"]:
+        raise ValueError(f"Expected Vidur {config['vidur_commit']}, found {commit}")
 
 
 def main():
@@ -152,15 +169,9 @@ def main():
     parser.add_argument("--smoke-replicas", type=int, choices=[1, 2], default=1)
     parser.add_argument("--jobs", type=int, choices=[1, 2, 3, 4], default=1)
     args = parser.parse_args()
-    config = json.loads((STAGE2 / "config.json").read_text(encoding="utf-8"))
-    if args.config:
-        overrides = json.loads(args.config.read_text(encoding="utf-8"))
-        config["vidur_args"].update(overrides.pop("vidur_args", {}))
-        config.update(overrides)
+    config = load_config(args.config)
     checkout, work = args.vidur.resolve(), args.work_dir.resolve()
-    commit = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=checkout, text=True).strip()
-    if commit != config["vidur_commit"]:
-        raise ValueError(f"Expected Vidur {config['vidur_commit']}, found {commit}")
+    check_vidur(checkout, config)
     work.mkdir(parents=True, exist_ok=True)
     traces, excluded = paired_traces(config)
     print(f"Excluded from each flow by context limit: {excluded}", flush=True)

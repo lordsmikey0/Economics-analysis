@@ -2,6 +2,8 @@
 
 [Llama 3 70B. Сравнение одной и двух реплик на 2 и 4 A100](llama3-70b.md)
 
+[Llama 3 70B. Пиковые сутки 21 и 22](llama3-70b-peak-days.md)
+
 Vidur моделирует обслуживание API-нагрузки из BurstGPT на `meta-llama/Meta-Llama-3-8B`. Использован готовый профиль вычислений и внимания для NVIDIA A100 80 ГБ из зафиксированной версии Vidur. Симулятор работал на CPU. [Версия Vidur `abae7f6`](https://github.com/microsoft/vidur/commit/abae7f63aa857300f5cdc6f5e0d27860cd24721b) · [Файлы профиля](https://github.com/microsoft/vidur/tree/abae7f63aa857300f5cdc6f5e0d27860cd24721b/data/profiling/compute/a100/meta-llama/Meta-Llama-3-8B)
 
 ## Входные данные и настройки
