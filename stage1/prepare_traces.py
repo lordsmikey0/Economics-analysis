@@ -62,19 +62,36 @@ def token_totals(rows):
     )
 
 
-def minute_counts(rows):
-    counts = [0] * MINUTES_PER_DAY
+def arrival_minute(row):
+    elapsed = Decimal(row["Timestamp"]) - DAY_START
+    if not 0 <= elapsed < DAY_SECONDS:
+        raise ValueError("Arrival outside the selected day")
+    return int(elapsed // SECONDS_PER_MINUTE)
+
+
+def minute_totals(rows):
+    requests = [0] * MINUTES_PER_DAY
+    input_tokens = [0] * MINUTES_PER_DAY
+    output_tokens = [0] * MINUTES_PER_DAY
     for row in rows:
-        elapsed = Decimal(row["Timestamp"]) - DAY_START
-        if not 0 <= elapsed < DAY_SECONDS:
-            raise ValueError("Arrival outside the selected day")
-        counts[int(elapsed // SECONDS_PER_MINUTE)] += 1
-    return counts
+        minute = arrival_minute(row)
+        requests[minute] += 1
+        input_tokens[minute] += int(row["Request tokens"])
+        output_tokens[minute] += int(row["Response tokens"])
+    return requests, input_tokens, output_tokens
 
 
 def clock_time(minute):
     hours, minutes = divmod(minute, 60)
     return f"{hours:02d}:{minutes:02d}"
+
+
+def write_minute_totals(path, requests, input_tokens, output_tokens):
+    with path.open("w", encoding="utf-8", newline="") as stream:
+        writer = csv.writer(stream, lineterminator="\n")
+        writer.writerow(("minute_start", "requests", "input_tokens", "output_tokens"))
+        for minute, values in enumerate(zip(requests, input_tokens, output_tokens)):
+            writer.writerow((clock_time(minute), *values))
 
 
 def plot_counts(path, counts, title, color, upper_limit):
@@ -127,7 +144,16 @@ def main():
     if token_totals(uniform) != totals:
         raise ValueError("Input or output token totals differ between traces")
 
-    real_counts, uniform_counts = minute_counts(real), minute_counts(uniform)
+    real_counts, input_tokens, output_tokens = minute_totals(real)
+    if (sum(real_counts), sum(input_tokens), sum(output_tokens)) != (count, *totals):
+        raise ValueError("Minute totals do not match the real trace")
+    write_minute_totals(
+        args.output_dir / "day16_real_per_minute.csv", real_counts, input_tokens, output_tokens,
+    )
+
+    uniform_counts = [0] * MINUTES_PER_DAY
+    for row in uniform:
+        uniform_counts[arrival_minute(row)] += 1
     real_peak, uniform_peak = max(real_counts), max(uniform_counts)
     upper_limit = 20 * (max(real_peak, uniform_peak) // 20 + 1)
     plot_counts(
@@ -144,6 +170,10 @@ def main():
     print(f"Real: mean {sum(real_counts) / MINUTES_PER_DAY:.5f}, max {real_peak} requests/min")
     print(f"Uniform: mean {sum(uniform_counts) / MINUTES_PER_DAY:.5f}, max {uniform_peak} requests/min")
     print(f"Real peak minute(s): {', '.join(peak_times)} (trace local time)")
+    for label, values in (("Input tokens", input_tokens), ("Output tokens", output_tokens)):
+        peak = max(values)
+        times = [clock_time(i) for i, value in enumerate(values) if value == peak]
+        print(f"{label}: max {peak} tokens/min at {', '.join(times)} (trace local time)")
 
 
 if __name__ == "__main__":
