@@ -112,6 +112,42 @@ def plot_counts(path, counts, title, color, upper_limit):
     plt.close(fig)
 
 
+def plot_token_usage(source, path, request_peak_minutes):
+    rows = read_trace(source)
+    fig, axes = plt.subplots(2, 1, sharex=True, figsize=(10, 5.6), layout="constrained")
+    series = (
+        ("input_tokens", "Входные токены", "#245583"),
+        ("output_tokens", "Выходные токены", "#00766c"),
+    )
+    for ax, (column, title, color) in zip(axes, series):
+        values = [int(row[column]) for row in rows]
+        ax.stairs(values, range(len(rows) + 1), color=color, linewidth=1, baseline=None)
+        for minute in request_peak_minutes:
+            ax.axvline(minute + 0.5, color="#687481", linestyle="--", linewidth=1, zorder=1)
+
+        peak = max(values)
+        peak_minute = values.index(peak)
+        peak_label = f"{rows[peak_minute]['minute_start']} · {peak:,}".replace(",", " ")
+        ax.scatter(peak_minute + 0.5, peak, color=color, s=22, zorder=3, clip_on=False)
+        ax.annotate(
+            peak_label, (peak_minute + 0.5, peak), xytext=(-8, 4),
+            textcoords="offset points", ha="right", va="bottom", color=color,
+        )
+        ax.set_ylim(0, max(1, peak * 1.18))
+        ax.set_ylabel("Токенов в минуту")
+        ax.set_title(title, loc="left", fontweight="bold", pad=8)
+        ax.spines[["top", "right"]].set_visible(False)
+        ax.set_axisbelow(True)
+        ax.grid(color="#dfe5eb", linewidth=0.65)
+
+    ticks = range(0, MINUTES_PER_DAY + 1, 180)
+    axes[-1].set_xticks(ticks, [clock_time(minute) for minute in ticks])
+    axes[-1].set_xlim(0, MINUTES_PER_DAY)
+    axes[-1].set_xlabel("Время суток по трассе")
+    fig.savefig(path, dpi=160)
+    plt.close(fig)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("source", type=Path, help="Path to the original BurstGPT_1.csv")
@@ -147,9 +183,8 @@ def main():
     real_counts, input_tokens, output_tokens = minute_totals(real)
     if (sum(real_counts), sum(input_tokens), sum(output_tokens)) != (count, *totals):
         raise ValueError("Minute totals do not match the real trace")
-    write_minute_totals(
-        args.output_dir / "day16_real_per_minute.csv", real_counts, input_tokens, output_tokens,
-    )
+    minute_totals_path = args.output_dir / "day16_real_per_minute.csv"
+    write_minute_totals(minute_totals_path, real_counts, input_tokens, output_tokens)
 
     uniform_counts = [0] * MINUTES_PER_DAY
     for row in uniform:
@@ -165,7 +200,9 @@ def main():
         "Равномерные времена прихода", "#00766c", upper_limit,
     )
 
-    peak_times = [clock_time(i) for i, value in enumerate(real_counts) if value == real_peak]
+    peak_minutes = [i for i, value in enumerate(real_counts) if value == real_peak]
+    plot_token_usage(minute_totals_path, args.output_dir / "day16_real_tokens.png", peak_minutes)
+    peak_times = [clock_time(minute) for minute in peak_minutes]
     print(f"Both traces: {count} requests, {totals[0]} input tokens, {totals[1]} output tokens")
     print(f"Real: mean {sum(real_counts) / MINUTES_PER_DAY:.5f}, max {real_peak} requests/min")
     print(f"Uniform: mean {sum(uniform_counts) / MINUTES_PER_DAY:.5f}, max {uniform_peak} requests/min")
